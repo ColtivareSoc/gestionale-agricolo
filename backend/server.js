@@ -57,3 +57,8 @@ app.listen(PORT, () => {
 });
 
 app.use("/api/auth", require("./routes/auth"));
+
+// Definisci le route API
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/prodotti-agricoli", require("./routes/prodottiAgricoli"));
+// Altre route verranno aggiunte successivamente
