@@ -1,3 +1,4 @@
+// backend/models/ProdottoAgricolo.js
 const mongoose = require("mongoose");
 
 const ProdottoAgricoloSchema = new mongoose.Schema(
@@ -162,6 +163,16 @@ ProdottoAgricoloSchema.virtual("periodoColtivazioneInMesi").get(function () {
 ProdottoAgricoloSchema.pre("save", function (next) {
   // Se necessario, aggiungi validazioni personalizzate qui
   next();
+});
+
+// Pre-remove hook per gestire le relazioni con gli appezzamenti
+ProdottoAgricoloSchema.pre("remove", async function () {
+  // Rimuovi questo prodotto dalle coltivazioni di tutti gli appezzamenti
+  const Appezzamento = mongoose.model("Appezzamento");
+  await Appezzamento.updateMany(
+    { "coltivazioni.id_prodotto": this._id },
+    { $pull: { coltivazioni: { id_prodotto: this._id } } }
+  );
 });
 
 module.exports = mongoose.model("ProdottoAgricolo", ProdottoAgricoloSchema);

@@ -24,10 +24,11 @@ app.get("/", (req, res) => {
   res.json({ message: "API Gestione Agricola" });
 });
 
-// Definisci le route API (saranno implementate successivamente)
-// app.use('/api/users', require('./routes/users'));
-// app.use('/api/prodotti-agricoli', require('./routes/prodottiAgricoli'));
-// app.use('/api/prodotti-agronomici', require('./routes/prodottiAgronomici'));
+// Definisci le route API
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/prodotti-agricoli", require("./routes/prodottiAgricoli"));
+// app.use("/api/prodotti-agronomici", require("./routes/prodottiAgronomici"));
+// Altre route verranno aggiunte successivamente
 // app.use('/api/appezzamenti', require('./routes/appezzamenti'));
 // app.use('/api/bins', require('./routes/bins'));
 // app.use('/api/vendite', require('./routes/vendite'));
@@ -55,10 +56,3 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server in esecuzione sulla porta ${PORT}`);
 });
-
-app.use("/api/auth", require("./routes/auth"));
-
-// Definisci le route API
-app.use("/api/auth", require("./routes/auth"));
-app.use("/api/prodotti-agricoli", require("./routes/prodottiAgricoli"));
-// Altre route verranno aggiunte successivamente
