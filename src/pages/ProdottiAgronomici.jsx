@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Typography,
   Box,
@@ -26,6 +26,8 @@ import {
   FormControl,
   InputLabel,
   Select,
+  CircularProgress,
+  Alert,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -38,168 +40,231 @@ import {
   Close as CloseIcon,
   Save as SaveIcon,
   ArrowBack as ArrowBackIcon,
+  Warning as WarningIcon,
 } from "@mui/icons-material";
 
-// Dati di esempio per le categorie
-const categorieMock = [
-  { id: 1, nome: "Fungicidi", tipo: "fitosanitario" },
-  { id: 2, nome: "Insetticidi", tipo: "fitosanitario" },
-  { id: 3, nome: "Diserbanti", tipo: "fitosanitario" },
-  { id: 4, nome: "Azotati", tipo: "concime" },
-  { id: 5, nome: "Fosfatici", tipo: "concime" },
-  { id: 6, nome: "Potassici", tipo: "concime" },
-  { id: 7, nome: "Organici", tipo: "concime" },
-];
-
-// Dati di esempio per i prodotti agronomici
-const prodottiMock = [
-  {
-    id: 1,
-    codice: "FUNG001",
-    nome_commerciale: "FungiStop Pro",
-    principio_attivo: "Tebuconazolo",
-    id_categoria: 1,
-    categoria_nome: "Fungicidi",
-    unita_misura: "l",
-  },
-  {
-    id: 2,
-    codice: "INS001",
-    nome_commerciale: "InsectoKill",
-    principio_attivo: "Lambda-cialotrina",
-    id_categoria: 2,
-    categoria_nome: "Insetticidi",
-    unita_misura: "l",
-  },
-  {
-    id: 3,
-    codice: "CONC001",
-    nome_commerciale: "NutriPlus N30",
-    principio_attivo: "Urea + Nitrato ammonico",
-    id_categoria: 4,
-    categoria_nome: "Azotati",
-    unita_misura: "kg",
-  },
-];
-
-// Dati di esempio per le giacenze
-const giacenzeMock = [
-  { id_prodotto: 1, quantita: 25.5, unita_misura: "l" },
-  { id_prodotto: 2, quantita: 8.0, unita_misura: "l" },
-  { id_prodotto: 3, quantita: 1200, unita_misura: "kg" },
-];
-
-// Dati di esempio per gli appezzamenti
-const appezzamentiMock = [
-  { id: 1, nome: "Campo Grande", superficie_ha: 2.5 },
-  { id: 2, nome: "Vigna Nord", superficie_ha: 1.8 },
-  { id: 3, nome: "Frutteto Est", superficie_ha: 3.2 },
-];
-
-// Aggiungiamo alcuni movimenti di esempio
-const movimentiMock = [
-  {
-    id: 1,
-    id_prodotto: 1,
-    data: "2024-03-15",
-    tipo: "carico",
-    quantita: 30,
-    unita_misura: "l",
-    fornitore: "AgrochemItalia",
-    documento: "Fattura 123/2024",
-    prezzo_unitario: 42.5,
-    note: "Acquisto iniziale",
-  },
-  {
-    id: 2,
-    id_prodotto: 1,
-    data: "2024-04-02",
-    tipo: "scarico",
-    quantita: 4.5,
-    unita_misura: "l",
-    id_appezzamento: 1,
-    nome_appezzamento: "Campo Grande",
-    trattamento: "Trattamento antioidico",
-    note: "Trattamento preventivo",
-  },
-];
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const ProdottiAgronomici = () => {
-  const [prodotti] = useState(prodottiMock);
-  const [giacenze, setGiacenze] = useState(giacenzeMock);
-  const [movimenti, setMovimenti] = useState(movimentiMock);
-  const [appezzamenti] = useState(appezzamentiMock);
+  const [prodotti, setProdotti] = useState([]);
+  const [movimenti, setMovimenti] = useState([]);
+  const [appezzamenti, setAppezzamenti] = useState([]);
   const [menuAnchorEl, setMenuAnchorEl] = useState(null);
   const [selectedProductForMenu, setSelectedProductForMenu] = useState(null);
   const [dialogCaricoOpen, setDialogCaricoOpen] = useState(false);
   const [dialogScaricoOpen, setDialogScaricoOpen] = useState(false);
+  const [dialogProdottoOpen, setDialogProdottoOpen] = useState(false);
   const [visualizzaMovimenti, setVisualizzaMovimenti] = useState(false);
   const [prodottoSelezionato, setProdottoSelezionato] = useState(null);
-
+  const [currentProdotto, setCurrentProdotto] = useState({
+    codice: "",
+    nome_commerciale: "",
+    principio_attivo: "",
+    categoria: "fitosanitario",
+    sottocategoria: "",
+    unita_misura: "l",
+    giacenza: {
+      scorta_minima: 0,
+      quantita_attuale: 0,
+      localizzazione: "",
+    },
+  });
   const [currentCarico, setCurrentCarico] = useState({
-    id_prodotto: "",
-    data: new Date().toISOString().split("T")[0],
+    tipo: "carico",
     quantita: "",
-    unita_misura: "",
     prezzo_unitario: "",
     fornitore: "",
     documento: "",
     note: "",
   });
-
   const [currentScarico, setCurrentScarico] = useState({
-    id_prodotto: "",
-    data: new Date().toISOString().split("T")[0],
+    tipo: "scarico",
     quantita: "",
-    unita_misura: "",
     id_appezzamento: "",
     trattamento: "",
     note: "",
   });
+  const [isEdit, setIsEdit] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Funzione per aprire il menu
+  // Carica prodotti e appezzamenti all'avvio
+  useEffect(() => {
+    fetchProdotti();
+    fetchAppezzamenti();
+  }, []);
+
+  // Fetch prodotti
+  const fetchProdotti = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/prodotti-agronomici`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) throw new Error("Errore nel recupero dei prodotti");
+
+      const data = await response.json();
+      setProdotti(data.prodotti);
+      setLoading(false);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
+  };
+
+  // Fetch appezzamenti
+  const fetchAppezzamenti = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/appezzamenti`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok)
+        throw new Error("Errore nel recupero degli appezzamenti");
+
+      const data = await response.json();
+      setAppezzamenti(data.appezzamenti);
+    } catch (err) {
+      console.error("Errore appezzamenti:", err.message);
+    }
+  };
+
+  // Fetch movimenti di un prodotto
+  const fetchMovimenti = async (prodottoId) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `${API_URL}/prodotti-agronomici/${prodottoId}/movimenti`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) throw new Error("Errore nel recupero dei movimenti");
+
+      const data = await response.json();
+      setMovimenti(data);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // Gestione menu
   const handleOpenMenu = (event, prodotto) => {
     setMenuAnchorEl(event.currentTarget);
     setSelectedProductForMenu(prodotto);
   };
 
-  // Funzione per chiudere il menu
   const handleCloseMenu = () => {
     setMenuAnchorEl(null);
     setSelectedProductForMenu(null);
   };
 
-  // Funzione per visualizzare i movimenti
+  // Visualizza movimenti
   const handleVisualizzaMovimenti = () => {
     setProdottoSelezionato(selectedProductForMenu);
+    fetchMovimenti(selectedProductForMenu._id);
     setVisualizzaMovimenti(true);
     handleCloseMenu();
   };
 
-  // Funzione per tornare alla lista prodotti
+  // Torna alla lista prodotti
   const handleBackToProducts = () => {
     setVisualizzaMovimenti(false);
     setProdottoSelezionato(null);
   };
 
+  // Gestione dialog prodotto
+  const handleOpenDialogProdotto = (prodotto = null) => {
+    if (prodotto) {
+      setCurrentProdotto(prodotto);
+      setIsEdit(true);
+    } else {
+      setCurrentProdotto({
+        codice: "",
+        nome_commerciale: "",
+        principio_attivo: "",
+        categoria: "fitosanitario",
+        sottocategoria: "",
+        unita_misura: "l",
+        giacenza: {
+          scorta_minima: 0,
+          quantita_attuale: 0,
+          localizzazione: "",
+        },
+      });
+      setIsEdit(false);
+    }
+    setDialogProdottoOpen(true);
+  };
+
+  const handleCloseProdottoDialog = () => {
+    setDialogProdottoOpen(false);
+  };
+
+  const handleProdottoInputChange = (e) => {
+    const { name, value } = e.target;
+    if (name.includes(".")) {
+      const [parent, child] = name.split(".");
+      setCurrentProdotto((prev) => ({
+        ...prev,
+        [parent]: {
+          ...prev[parent],
+          [child]: value,
+        },
+      }));
+    } else {
+      setCurrentProdotto((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
+  };
+
+  const handleSaveProdotto = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const method = isEdit ? "PUT" : "POST";
+      const url = isEdit
+        ? `${API_URL}/prodotti-agronomici/${currentProdotto._id}`
+        : `${API_URL}/prodotti-agronomici`;
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(currentProdotto),
+      });
+
+      if (!response.ok) throw new Error("Errore nel salvataggio del prodotto");
+
+      fetchProdotti();
+      handleCloseProdottoDialog();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   // Gestione dialog carico
   const handleOpenDialogCarico = () => {
-    const giacenza = giacenze.find(
-      (g) => g.id_prodotto === selectedProductForMenu.id
-    );
-
     setCurrentCarico({
-      id_prodotto: selectedProductForMenu.id,
-      data: new Date().toISOString().split("T")[0],
+      tipo: "carico",
       quantita: "",
-      unita_misura:
-        giacenza?.unita_misura || selectedProductForMenu.unita_misura,
       prezzo_unitario: "",
       fornitore: "",
       documento: "",
       note: "",
     });
-
     setDialogCaricoOpen(true);
     handleCloseMenu();
   };
@@ -210,78 +275,54 @@ const ProdottiAgronomici = () => {
 
   const handleCaricoInputChange = (e) => {
     const { name, value } = e.target;
-    setCurrentCarico({
-      ...currentCarico,
+    setCurrentCarico((prev) => ({
+      ...prev,
       [name]: value,
-    });
+    }));
   };
 
-  const handleSaveCarico = () => {
-    // Crea nuovo movimento di carico
-    const newMovimento = {
-      id: movimenti.length ? Math.max(...movimenti.map((m) => m.id)) + 1 : 1,
-      ...currentCarico,
-      tipo: "carico",
-      quantita: parseFloat(currentCarico.quantita),
-    };
-
-    // Aggiorna movimenti
-    setMovimenti([...movimenti, newMovimento]);
-
-    // Aggiorna giacenze
-    const giacenzaEsistente = giacenze.find(
-      (g) => g.id_prodotto === parseInt(currentCarico.id_prodotto)
-    );
-
-    if (giacenzaEsistente) {
-      // Aggiorna giacenza esistente
-      const updatedGiacenze = giacenze.map((g) => {
-        if (g.id_prodotto === parseInt(currentCarico.id_prodotto)) {
-          return {
-            ...g,
-            quantita: g.quantita + parseFloat(currentCarico.quantita),
-          };
+  const handleSaveCarico = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `${API_URL}/prodotti-agronomici/${selectedProductForMenu._id}/movimenti`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            ...currentCarico,
+            unita_misura: selectedProductForMenu.unita_misura,
+          }),
         }
-        return g;
-      });
+      );
 
-      setGiacenze(updatedGiacenze);
-    } else {
-      // Crea nuova giacenza
-      const nuovaGiacenza = {
-        id_prodotto: parseInt(currentCarico.id_prodotto),
-        quantita: parseFloat(currentCarico.quantita),
-        unita_misura: currentCarico.unita_misura,
-      };
+      if (!response.ok) throw new Error("Errore nel salvataggio del carico");
 
-      setGiacenze([...giacenze, nuovaGiacenza]);
+      fetchProdotti();
+      handleCloseDialogCarico();
+    } catch (err) {
+      setError(err.message);
     }
-
-    handleCloseDialogCarico();
   };
 
   // Gestione dialog scarico
   const handleOpenDialogScarico = () => {
-    const giacenza = giacenze.find(
-      (g) => g.id_prodotto === selectedProductForMenu.id
-    );
-
-    if (!giacenza || giacenza.quantita <= 0) {
-      alert("Non ci sono giacenze disponibili per questo prodotto!");
+    if (!selectedProductForMenu.giacenza?.quantita_attuale) {
+      setError("Non ci sono giacenze disponibili per questo prodotto!");
       handleCloseMenu();
       return;
     }
 
     setCurrentScarico({
-      id_prodotto: selectedProductForMenu.id,
-      data: new Date().toISOString().split("T")[0],
+      tipo: "scarico",
       quantita: "",
-      unita_misura: giacenza.unita_misura,
       id_appezzamento: "",
       trattamento: "",
       note: "",
     });
-
     setDialogScaricoOpen(true);
     handleCloseMenu();
   };
@@ -292,60 +333,66 @@ const ProdottiAgronomici = () => {
 
   const handleScaricoInputChange = (e) => {
     const { name, value } = e.target;
-    setCurrentScarico({
-      ...currentScarico,
+    setCurrentScarico((prev) => ({
+      ...prev,
       [name]: value,
-    });
+    }));
   };
 
-  const handleSaveScarico = () => {
-    const giacenza = giacenze.find(
-      (g) => g.id_prodotto === parseInt(currentScarico.id_prodotto)
-    );
-
-    // Verifica che ci sia giacenza sufficiente
-    if (parseFloat(currentScarico.quantita) > giacenza.quantita) {
-      alert(
-        `Giacenza insufficiente! Disponibile: ${giacenza.quantita} ${giacenza.unita_misura}`
+  const handleSaveScarico = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `${API_URL}/prodotti-agronomici/${selectedProductForMenu._id}/movimenti`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            ...currentScarico,
+            unita_misura: selectedProductForMenu.unita_misura,
+          }),
+        }
       );
-      return;
-    }
 
-    // Trova l'appezzamento selezionato
-    const appezzamento = appezzamenti.find(
-      (a) => a.id === parseInt(currentScarico.id_appezzamento)
-    );
-
-    // Crea nuovo movimento di scarico
-    const newMovimento = {
-      id: movimenti.length ? Math.max(...movimenti.map((m) => m.id)) + 1 : 1,
-      ...currentScarico,
-      tipo: "scarico",
-      quantita: parseFloat(currentScarico.quantita),
-      nome_appezzamento: appezzamento.nome,
-    };
-
-    // Aggiorna movimenti
-    setMovimenti([...movimenti, newMovimento]);
-
-    // Aggiorna giacenza
-    const updatedGiacenze = giacenze.map((g) => {
-      if (g.id_prodotto === parseInt(currentScarico.id_prodotto)) {
-        return {
-          ...g,
-          quantita: g.quantita - parseFloat(currentScarico.quantita),
-        };
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.message || "Errore nel salvataggio dello scarico"
+        );
       }
-      return g;
-    });
 
-    setGiacenze(updatedGiacenze);
-
-    handleCloseDialogScarico();
+      fetchProdotti();
+      handleCloseDialogScarico();
+    } catch (err) {
+      setError(err.message);
+    }
   };
+
+  // Rendering condizionale per loadinge error
+  if (loading) {
+    return (
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        minHeight="400px"
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Box>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
       {!visualizzaMovimenti ? (
         // Vista principale: elenco prodotti agronomici
         <>
@@ -358,7 +405,12 @@ const ProdottiAgronomici = () => {
             <Typography variant="h4" component="h1">
               Gestione Prodotti Agronomici
             </Typography>
-            <Button variant="contained" color="primary" startIcon={<AddIcon />}>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={() => handleOpenDialogProdotto()}
+            >
               Nuovo Prodotto
             </Button>
           </Box>
@@ -376,52 +428,52 @@ const ProdottiAgronomici = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {prodotti.map((prodotto) => {
-                  const categoria = categorieMock.find(
-                    (c) => c.id === prodotto.id_categoria
-                  );
-                  const giacenza = giacenze.find(
-                    (g) => g.id_prodotto === prodotto.id
-                  );
-
-                  return (
-                    <TableRow key={prodotto.id}>
-                      <TableCell>{prodotto.codice}</TableCell>
-                      <TableCell>{prodotto.nome_commerciale}</TableCell>
-                      <TableCell>{prodotto.principio_attivo}</TableCell>
-                      <TableCell>
+                {prodotti.map((prodotto) => (
+                  <TableRow key={prodotto._id}>
+                    <TableCell>{prodotto.codice}</TableCell>
+                    <TableCell>{prodotto.nome_commerciale}</TableCell>
+                    <TableCell>{prodotto.principio_attivo}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={prodotto.categoria}
+                        color={
+                          prodotto.categoria === "fitosanitario"
+                            ? "error"
+                            : "success"
+                        }
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      {prodotto.giacenza?.quantita_attuale || 0}{" "}
+                      {prodotto.unita_misura}
+                      {prodotto.giacenza?.quantita_attuale <=
+                        prodotto.giacenza?.scorta_minima && (
                         <Chip
-                          label={prodotto.categoria_nome}
-                          color={
-                            categoria?.tipo === "fitosanitario"
-                              ? "error"
-                              : "success"
-                          }
+                          label="Scorta bassa"
+                          color="warning"
                           size="small"
+                          icon={<WarningIcon />}
+                          sx={{ ml: 1 }}
                         />
-                      </TableCell>
-                      <TableCell align="right">
-                        {giacenza
-                          ? `${giacenza.quantita} ${giacenza.unita_misura}`
-                          : "N/D"}
-                      </TableCell>
-                      <TableCell align="center">
-                        <IconButton color="primary">
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          color="secondary"
-                          onClick={(e) => handleOpenMenu(e, prodotto)}
-                        >
-                          <InventoryIcon />
-                        </IconButton>
-                        <IconButton color="error">
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                      )}
+                    </TableCell>
+                    <TableCell align="center">
+                      <IconButton
+                        color="primary"
+                        onClick={() => handleOpenDialogProdotto(prodotto)}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        color="secondary"
+                        onClick={(e) => handleOpenMenu(e, prodotto)}
+                      >
+                        <InventoryIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </TableContainer>
@@ -455,44 +507,42 @@ const ProdottiAgronomici = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {movimenti.filter(
-                  (m) => m.id_prodotto === prodottoSelezionato?.id
-                ).length > 0 ? (
-                  movimenti
-                    .filter((m) => m.id_prodotto === prodottoSelezionato?.id)
-                    .map((movimento) => (
-                      <TableRow key={movimento.id}>
-                        <TableCell>{movimento.data}</TableCell>
-                        <TableCell>
-                          <Chip
-                            label={
-                              movimento.tipo === "carico" ? "Carico" : "Scarico"
-                            }
-                            color={
-                              movimento.tipo === "carico" ? "success" : "error"
-                            }
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell align="right">
-                          {movimento.quantita} {movimento.unita_misura}
-                        </TableCell>
-                        <TableCell>
-                          {movimento.tipo === "carico" ? (
-                            <Typography variant="body2">
-                              Fornitore: {movimento.fornitore}, Doc:{" "}
-                              {movimento.documento}
-                            </Typography>
-                          ) : (
-                            <Typography variant="body2">
-                              Appezzamento: {movimento.nome_appezzamento},
-                              Trattamento: {movimento.trattamento}
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell>{movimento.note}</TableCell>
-                      </TableRow>
-                    ))
+                {movimenti.length > 0 ? (
+                  movimenti.map((movimento) => (
+                    <TableRow key={movimento._id}>
+                      <TableCell>
+                        {new Date(movimento.data).toLocaleDateString("it-IT")}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={
+                            movimento.tipo === "carico" ? "Carico" : "Scarico"
+                          }
+                          color={
+                            movimento.tipo === "carico" ? "success" : "error"
+                          }
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        {movimento.quantita} {movimento.unita_misura}
+                      </TableCell>
+                      <TableCell>
+                        {movimento.tipo === "carico" ? (
+                          <Typography variant="body2">
+                            Fornitore: {movimento.fornitore}, Doc:{" "}
+                            {movimento.documento}
+                          </Typography>
+                        ) : (
+                          <Typography variant="body2">
+                            Appezzamento: {movimento.id_appezzamento?.nome},
+                            Trattamento: {movimento.trattamento}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>{movimento.note}</TableCell>
+                    </TableRow>
+                  ))
                 ) : (
                   <TableRow>
                     <TableCell colSpan={5} align="center">
@@ -532,6 +582,113 @@ const ProdottiAgronomici = () => {
         </MenuItem>
       </Menu>
 
+      {/* Dialog per gestione prodotto */}
+      <Dialog
+        open={dialogProdottoOpen}
+        onClose={handleCloseProdottoDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          {isEdit ? "Modifica Prodotto" : "Nuovo Prodotto"}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                name="codice"
+                label="Codice"
+                value={currentProdotto.codice}
+                onChange={handleProdottoInputChange}
+                fullWidth
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                name="nome_commerciale"
+                label="Nome Commerciale"
+                value={currentProdotto.nome_commerciale}
+                onChange={handleProdottoInputChange}
+                fullWidth
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                name="principio_attivo"
+                label="Principio Attivo"
+                value={currentProdotto.principio_attivo}
+                onChange={handleProdottoInputChange}
+                fullWidth
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth required>
+                <InputLabel>Categoria</InputLabel>
+                <Select
+                  name="categoria"
+                  value={currentProdotto.categoria}
+                  label="Categoria"
+                  onChange={handleProdottoInputChange}
+                >
+                  <MenuItem value="fitosanitario">Fitosanitario</MenuItem>
+                  <MenuItem value="concime">Concime</MenuItem>
+                  <MenuItem value="altro">Altro</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Unità di Misura</InputLabel>
+                <Select
+                  name="unita_misura"
+                  value={currentProdotto.unita_misura}
+                  label="Unità di Misura"
+                  onChange={handleProdottoInputChange}
+                >
+                  <MenuItem value="l">Litri (l)</MenuItem>
+                  <MenuItem value="kg">Chilogrammi (kg)</MenuItem>
+                  <MenuItem value="g">Grammi (g)</MenuItem>
+                  <MenuItem value="ml">Millilitri (ml)</MenuItem>
+                  <MenuItem value="t">Tonnellate (t)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                name="giacenza.scorta_minima"
+                label="Scorta Minima"
+                type="number"
+                value={currentProdotto.giacenza?.scorta_minima || 0}
+                onChange={handleProdottoInputChange}
+                fullWidth
+                InputProps={{
+                  inputProps: { min: 0 },
+                }}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseProdottoDialog} startIcon={<CloseIcon />}>
+            Annulla
+          </Button>
+          <Button
+            onClick={handleSaveProdotto}
+            variant="contained"
+            color="primary"
+            startIcon={<SaveIcon />}
+            disabled={
+              !currentProdotto.codice || !currentProdotto.nome_commerciale
+            }
+          >
+            Salva
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Dialog per registrazione carico */}
       <Dialog
         open={dialogCaricoOpen}
@@ -546,20 +703,6 @@ const ProdottiAgronomici = () => {
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12} sm={6}>
               <TextField
-                name="data"
-                label="Data"
-                type="date"
-                value={currentCarico.data}
-                onChange={handleCaricoInputChange}
-                fullWidth
-                required
-                InputLabelProps={{
-                  shrink: true,
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
                 name="quantita"
                 label="Quantità"
                 type="number"
@@ -571,9 +714,22 @@ const ProdottiAgronomici = () => {
                   inputProps: { min: 0, step: 0.01 },
                   endAdornment: (
                     <InputAdornment position="end">
-                      {currentCarico.unita_misura}
+                      {selectedProductForMenu?.unita_misura}
                     </InputAdornment>
                   ),
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                name="prezzo_unitario"
+                label="Prezzo Unitario (€)"
+                type="number"
+                value={currentCarico.prezzo_unitario}
+                onChange={handleCaricoInputChange}
+                fullWidth
+                InputProps={{
+                  inputProps: { min: 0, step: 0.01 },
                 }}
               />
             </Grid>
@@ -593,19 +749,6 @@ const ProdottiAgronomici = () => {
                 value={currentCarico.documento}
                 onChange={handleCaricoInputChange}
                 fullWidth
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                name="prezzo_unitario"
-                label="Prezzo unitario (€)"
-                type="number"
-                value={currentCarico.prezzo_unitario}
-                onChange={handleCaricoInputChange}
-                fullWidth
-                InputProps={{
-                  inputProps: { min: 0, step: 0.01 },
-                }}
               />
             </Grid>
             <Grid item xs={12}>
@@ -651,20 +794,6 @@ const ProdottiAgronomici = () => {
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12} sm={6}>
               <TextField
-                name="data"
-                label="Data Trattamento"
-                type="date"
-                value={currentScarico.data}
-                onChange={handleScaricoInputChange}
-                fullWidth
-                required
-                InputLabelProps={{
-                  shrink: true,
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
                 name="quantita"
                 label="Quantità Utilizzata"
                 type="number"
@@ -676,15 +805,11 @@ const ProdottiAgronomici = () => {
                   inputProps: {
                     min: 0,
                     step: 0.01,
-                    max:
-                      giacenze.find(
-                        (g) =>
-                          g.id_prodotto === parseInt(currentScarico.id_prodotto)
-                      )?.quantita || 0,
+                    max: selectedProductForMenu?.giacenza?.quantita_attuale,
                   },
                   endAdornment: (
                     <InputAdornment position="end">
-                      {currentScarico.unita_misura}
+                      {selectedProductForMenu?.unita_misura}
                     </InputAdornment>
                   ),
                 }}
@@ -700,7 +825,7 @@ const ProdottiAgronomici = () => {
                   onChange={handleScaricoInputChange}
                 >
                   {appezzamenti.map((appezzamento) => (
-                    <MenuItem key={appezzamento.id} value={appezzamento.id}>
+                    <MenuItem key={appezzamento._id} value={appezzamento._id}>
                       {appezzamento.nome} ({appezzamento.superficie_ha} ha)
                     </MenuItem>
                   ))}

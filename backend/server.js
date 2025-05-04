@@ -27,9 +27,9 @@ app.get("/", (req, res) => {
 // Definisci le route API
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/prodotti-agricoli", require("./routes/prodottiAgricoli"));
-// app.use("/api/prodotti-agronomici", require("./routes/prodottiAgronomici"));
+app.use("/api/prodotti-agronomici", require("./routes/prodottiAgronomici"));
+app.use("/api/appezzamenti", require("./routes/appezzamenti"));
 // Altre route verranno aggiunte successivamente
-// app.use('/api/appezzamenti', require('./routes/appezzamenti'));
 // app.use('/api/bins', require('./routes/bins'));
 // app.use('/api/vendite', require('./routes/vendite'));
 // app.use('/api/finanza', require('./routes/finanza'));
