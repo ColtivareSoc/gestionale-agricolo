@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Typography,
   Box,
@@ -25,6 +25,8 @@ import {
   Tab,
   Chip,
   InputAdornment,
+  CircularProgress,
+  Alert,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -36,105 +38,12 @@ import {
   AddBox as AddBoxIcon,
 } from "@mui/icons-material";
 
-// Dati di esempio per i BINS
-const binsMock = [
-  {
-    id: 1,
-    codice_identificativo: "BIN001",
-    tipo: "Plastica",
-    capacita_kg: 300,
-    tara_kg: 20,
-    stato: "vuoto",
-    id_prodotto: null,
-    prodotto_nome: null,
-    id_origine: null,
-    origine_tipo: null,
-    origine_nome: null,
-    anno_raccolta: null,
-    peso_netto_kg: null,
-    localizzazione: "Magazzino A",
-    data_acquisto: "2023-01-15",
-  },
-  {
-    id: 2,
-    codice_identificativo: "BIN002",
-    tipo: "Plastica",
-    capacita_kg: 300,
-    tara_kg: 20,
-    stato: "pieno",
-    id_prodotto: 1,
-    prodotto_nome: "Mele Golden",
-    id_origine: 1,
-    origine_tipo: "appezzamento",
-    origine_nome: "Campo Grande",
-    anno_raccolta: 2024,
-    peso_netto_kg: 260,
-    localizzazione: "Cella frigorifera 2",
-    data_acquisto: "2023-01-15",
-  },
-  {
-    id: 3,
-    codice_identificativo: "BIN003",
-    tipo: "Plastica",
-    capacita_kg: 300,
-    tara_kg: 20,
-    stato: "in_lavorazione",
-    id_prodotto: 1,
-    prodotto_nome: "Mele Golden",
-    id_origine: 1,
-    origine_tipo: "appezzamento",
-    origine_nome: "Campo Grande",
-    anno_raccolta: 2024,
-    peso_netto_kg: 265,
-    localizzazione: "Linea 1",
-    data_acquisto: "2023-01-15",
-  },
-  {
-    id: 4,
-    codice_identificativo: "BIN004",
-    tipo: "Plastica",
-    capacita_kg: 300,
-    tara_kg: 20,
-    stato: "pieno",
-    id_prodotto: 2,
-    prodotto_nome: "Pere Abate",
-    id_origine: 5,
-    origine_tipo: "fornitore",
-    origine_nome: "Azienda Agricola Rossi",
-    anno_raccolta: 2024,
-    peso_netto_kg: 270,
-    localizzazione: "Cella frigorifera 1",
-    data_acquisto: "2023-01-15",
-  },
-];
-
-// Dati di esempio per i prodotti
-const prodottiMock = [
-  { id: 1, nome: "Mele Golden" },
-  { id: 2, nome: "Pere Abate" },
-  { id: 3, nome: "Pesche" },
-  { id: 4, nome: "Nettarine" },
-];
-
-// Dati di esempio per gli appezzamenti (origine)
-const appezzamentiMock = [
-  { id: 1, nome: "Campo Grande" },
-  { id: 2, nome: "Vigna Nord" },
-  { id: 3, nome: "Frutteto Est" },
-];
-
-// Dati di esempio per i fornitori (origine)
-const fornitoriMock = [
-  { id: 5, nome: "Azienda Agricola Rossi" },
-  { id: 6, nome: "Cooperativa Frutta Bella" },
-  { id: 7, nome: "Agricola dei Colli" },
-];
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const GestioneBins = () => {
-  const [bins, setBins] = useState(binsMock);
-  const [prodotti] = useState(prodottiMock);
-  const [appezzamenti] = useState(appezzamentiMock);
-  const [fornitori] = useState(fornitoriMock);
+  const [bins, setBins] = useState([]);
+  const [prodotti, setProdotti] = useState([]);
+  const [appezzamenti, setAppezzamenti] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogCaricoOpen, setDialogCaricoOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -144,12 +53,10 @@ const GestioneBins = () => {
     tipo: "Plastica",
     capacita_kg: 300,
     tara_kg: 20,
-    stato: "vuoto",
     localizzazione: "",
     data_acquisto: new Date().toISOString().split("T")[0],
   });
   const [currentCarico, setCurrentCarico] = useState({
-    id_bin: "",
     id_prodotto: "",
     origine_tipo: "",
     id_origine: "",
@@ -169,6 +76,72 @@ const GestioneBins = () => {
     localizzazione: "",
     data_acquisto: new Date().toISOString().split("T")[0],
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch iniziale dei dati
+  useEffect(() => {
+    fetchBins();
+    fetchProdotti();
+    fetchAppezzamenti();
+  }, []);
+
+  const fetchBins = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/bins`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) throw new Error("Errore nel recupero dei BINS");
+
+      const data = await response.json();
+      setBins(data.bins);
+      setLoading(false);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
+  };
+
+  const fetchProdotti = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/prodotti-agricoli`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) throw new Error("Errore nel recupero dei prodotti");
+
+      const data = await response.json();
+      setProdotti(data.prodotti);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const fetchAppezzamenti = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/appezzamenti`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok)
+        throw new Error("Errore nel recupero degli appezzamenti");
+
+      const data = await response.json();
+      setAppezzamenti(data.appezzamenti);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
   // Gestione tabs
   const handleTabChange = (event, newValue) => {
@@ -186,7 +159,6 @@ const GestioneBins = () => {
         tipo: "Plastica",
         capacita_kg: 300,
         tara_kg: 20,
-        stato: "vuoto",
         localizzazione: "",
         data_acquisto: new Date().toISOString().split("T")[0],
       });
@@ -207,29 +179,30 @@ const GestioneBins = () => {
     });
   };
 
-  const handleSave = () => {
-    if (isEdit) {
-      // Update existing bin
-      const updatedBins = bins.map((item) =>
-        item.id === currentBin.id ? currentBin : item
-      );
-      setBins(updatedBins);
-    } else {
-      // Add new bin
-      const newBin = {
-        ...currentBin,
-        id: Math.max(...bins.map((b) => b.id), 0) + 1,
-        id_prodotto: null,
-        prodotto_nome: null,
-        id_origine: null,
-        origine_tipo: null,
-        origine_nome: null,
-        anno_raccolta: null,
-        peso_netto_kg: null,
-      };
-      setBins([...bins, newBin]);
+  const handleSave = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const method = isEdit ? "PUT" : "POST";
+      const url = isEdit
+        ? `${API_URL}/bins/${currentBin._id}`
+        : `${API_URL}/bins`;
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(currentBin),
+      });
+
+      if (!response.ok) throw new Error("Errore nel salvataggio del BIN");
+
+      fetchBins();
+      handleCloseDialog();
+    } catch (err) {
+      setError(err.message);
     }
-    handleCloseDialog();
   };
 
   // Gestione creazione multipla BINS
@@ -249,49 +222,35 @@ const GestioneBins = () => {
     });
   };
 
-  const handleSaveBatch = () => {
-    const newBins = [];
-    const startId = Math.max(...bins.map((b) => b.id), 0) + 1;
-
-    for (let i = 0; i < parseInt(batchData.quantita); i++) {
-      // Genera numero con leading zeros
-      const numero = (parseInt(batchData.numero_iniziale) + i)
-        .toString()
-        .padStart(3, "0");
-      const codice = `${batchData.prefisso}${numero}`;
-
-      newBins.push({
-        id: startId + i,
-        codice_identificativo: codice,
-        tipo: batchData.tipo,
-        capacita_kg: parseFloat(batchData.capacita_kg),
-        tara_kg: parseFloat(batchData.tara_kg),
-        stato: "vuoto",
-        id_prodotto: null,
-        prodotto_nome: null,
-        id_origine: null,
-        origine_tipo: null,
-        origine_nome: null,
-        anno_raccolta: null,
-        peso_netto_kg: null,
-        localizzazione: batchData.localizzazione,
-        data_acquisto: batchData.data_acquisto,
+  const handleSaveBatch = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/bins/batch`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(batchData),
       });
-    }
 
-    setBins([...bins, ...newBins]);
-    handleCloseBatchDialog();
+      if (!response.ok) throw new Error("Errore nella creazione batch");
+
+      fetchBins();
+      handleCloseBatchDialog();
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
-  // Gestione carico bin (riempimento)
+  // Gestione carico bin
   const handleOpenDialogCarico = (bin) => {
     if (bin.stato !== "vuoto") {
-      alert("Solo i BINS vuoti possono essere caricati.");
+      setError("Solo i BINS vuoti possono essere caricati.");
       return;
     }
 
     setCurrentCarico({
-      id_bin: bin.id,
       id_prodotto: "",
       origine_tipo: "",
       id_origine: "",
@@ -300,6 +259,7 @@ const GestioneBins = () => {
       localizzazione: bin.localizzazione,
     });
 
+    setCurrentBin(bin);
     setDialogCaricoOpen(true);
   };
 
@@ -315,67 +275,34 @@ const GestioneBins = () => {
     });
   };
 
-  const handleSaveCarico = () => {
-    // Trova il bin selezionato
-    const binSelezionato = bins.find((b) => b.id === currentCarico.id_bin);
+  const handleSaveCarico = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/bins/${currentBin._id}/carica`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(currentCarico),
+      });
 
-    // Verifica che il peso non superi la capacità
-    if (
-      parseFloat(currentCarico.peso_netto_kg) >
-      binSelezionato.capacita_kg - binSelezionato.tara_kg
-    ) {
-      alert(
-        `Il peso netto non può superare ${
-          binSelezionato.capacita_kg - binSelezionato.tara_kg
-        } kg (capacità - tara).`
-      );
-      return;
-    }
-
-    // Trova nome prodotto
-    const prodotto = prodotti.find(
-      (p) => p.id === parseInt(currentCarico.id_prodotto)
-    );
-
-    // Trova nome origine
-    let origine = null;
-    if (currentCarico.origine_tipo === "appezzamento") {
-      origine = appezzamenti.find(
-        (a) => a.id === parseInt(currentCarico.id_origine)
-      );
-    } else if (currentCarico.origine_tipo === "fornitore") {
-      origine = fornitori.find(
-        (f) => f.id === parseInt(currentCarico.id_origine)
-      );
-    }
-
-    // Aggiorna bin
-    const updatedBins = bins.map((bin) => {
-      if (bin.id === currentCarico.id_bin) {
-        return {
-          ...bin,
-          stato: "pieno",
-          id_prodotto: parseInt(currentCarico.id_prodotto),
-          prodotto_nome: prodotto?.nome,
-          origine_tipo: currentCarico.origine_tipo,
-          id_origine: parseInt(currentCarico.id_origine),
-          origine_nome: origine?.nome,
-          anno_raccolta: parseInt(currentCarico.anno_raccolta),
-          peso_netto_kg: parseFloat(currentCarico.peso_netto_kg),
-          localizzazione: currentCarico.localizzazione,
-        };
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Errore nel carico del BIN");
       }
-      return bin;
-    });
 
-    setBins(updatedBins);
-    handleCloseDialogCarico();
+      fetchBins();
+      handleCloseDialogCarico();
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
-  // Gestione scarico bin (svuotamento)
-  const handleSvuotaBin = (bin) => {
+  // Gestione scarico bin
+  const handleSvuotaBin = async (bin) => {
     if (bin.stato === "vuoto") {
-      alert("Questo BIN è già vuoto.");
+      setError("Questo BIN è già vuoto.");
       return;
     }
 
@@ -384,62 +311,80 @@ const GestioneBins = () => {
         `Sei sicuro di voler svuotare il BIN ${bin.codice_identificativo}?`
       )
     ) {
-      const updatedBins = bins.map((item) => {
-        if (item.id === bin.id) {
-          return {
-            ...item,
-            stato: "vuoto",
-            id_prodotto: null,
-            prodotto_nome: null,
-            id_origine: null,
-            origine_tipo: null,
-            origine_nome: null,
-            anno_raccolta: null,
-            peso_netto_kg: null,
-          };
-        }
-        return item;
-      });
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(`${API_URL}/bins/${bin._id}/svuota`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
-      setBins(updatedBins);
+        if (!response.ok) throw new Error("Errore nello svuotamento del BIN");
+
+        fetchBins();
+      } catch (err) {
+        setError(err.message);
+      }
     }
   };
 
   // Gestione stato lavorazione
-  const handleSetStatoLavorazione = (bin) => {
+  const handleSetStatoLavorazione = async (bin) => {
     if (bin.stato !== "pieno") {
-      alert("Solo i BINS pieni possono essere messi in lavorazione.");
+      setError("Solo i BINS pieni possono essere messi in lavorazione.");
       return;
     }
 
-    const updatedBins = bins.map((item) => {
-      if (item.id === bin.id) {
-        return {
-          ...item,
-          stato: "in_lavorazione",
-        };
-      }
-      return item;
-    });
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `${API_URL}/bins/${bin._id}/in-lavorazione`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-    setBins(updatedBins);
-  };
+      if (!response.ok) throw new Error("Errore nel cambio stato");
 
-  // Eliminazione bin
-  const handleDelete = (id) => {
-    if (window.confirm("Sei sicuro di voler eliminare questo BIN?")) {
-      setBins(bins.filter((item) => item.id !== id));
+      fetchBins();
+    } catch (err) {
+      setError(err.message);
     }
   };
 
-  // Filtraggio bins in base alla ricerca e alla tab selezionata
+  // Eliminazione bin
+  const handleDelete = async (id) => {
+    if (window.confirm("Sei sicuro di voler eliminare questo BIN?")) {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(`${API_URL}/bins/${id}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) throw new Error("Errore nell'eliminazione del BIN");
+
+        fetchBins();
+      } catch (err) {
+        setError(err.message);
+      }
+    }
+  };
+
+  // Filtraggio bins
   const filteredBins = bins.filter((bin) => {
     // Applica filtro di ricerca
     const matchesSearch =
       bin.codice_identificativo
-        .toLowerCase()
+        ?.toLowerCase()
         .includes(searchTerm.toLowerCase()) ||
-      bin.localizzazione.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      bin.localizzazione?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (bin.prodotto_nome &&
         bin.prodotto_nome.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -452,31 +397,52 @@ const GestioneBins = () => {
     return matchesSearch;
   });
 
-  // Funzione per renderizzare chip stato con colore appropriato
+  // Rendering
   const renderStatoChip = (stato) => {
     let color = "default";
+    let label = stato;
+
     switch (stato) {
       case "vuoto":
         color = "default";
+        label = "Vuoto";
         break;
       case "pieno":
         color = "success";
+        label = "Pieno";
         break;
       case "in_lavorazione":
         color = "warning";
+        label = "In Lavorazione";
         break;
       default:
-        color = "default";
+        break;
     }
-
-    let label =
-      stato.charAt(0).toUpperCase() + stato.slice(1).replace("_", " ");
 
     return <Chip label={label} color={color} size="small" />;
   };
 
+  if (loading) {
+    return (
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        minHeight="400px"
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
       <Box
         display="flex"
         justifyContent="space-between"
@@ -557,7 +523,7 @@ const GestioneBins = () => {
           <TableBody>
             {filteredBins.length > 0 ? (
               filteredBins.map((bin) => (
-                <TableRow key={bin.id}>
+                <TableRow key={bin._id}>
                   <TableCell>{bin.codice_identificativo}</TableCell>
                   <TableCell>{renderStatoChip(bin.stato)}</TableCell>
                   <TableCell>{bin.prodotto_nome || "-"}</TableCell>
@@ -620,7 +586,7 @@ const GestioneBins = () => {
                       {bin.stato === "vuoto" && (
                         <IconButton
                           color="error"
-                          onClick={() => handleDelete(bin.id)}
+                          onClick={() => handleDelete(bin._id)}
                           title="Elimina BIN"
                         >
                           <DeleteIcon />
@@ -876,7 +842,7 @@ const GestioneBins = () => {
               {batchData.quantita <= 5 ? (
                 <Box component="span" sx={{ display: "block", mt: 1 }}>
                   {Array.from(
-                    { length: Math.min(parseInt(batchData.quantita), 5) },
+                    { length: Math.min(parseInt(batchData.quantita) || 0, 5) },
                     (_, i) => {
                       const numero = (parseInt(batchData.numero_iniziale) + i)
                         .toString()
@@ -921,7 +887,7 @@ const GestioneBins = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Dialog per carico BIN (riempimento) */}
+      {/* Dialog per carico BIN */}
       <Dialog
         open={dialogCaricoOpen}
         onClose={handleCloseDialogCarico}
@@ -929,11 +895,7 @@ const GestioneBins = () => {
         fullWidth
       >
         <DialogTitle>
-          Carica BIN:{" "}
-          {
-            bins.find((b) => b.id === currentCarico.id_bin)
-              ?.codice_identificativo
-          }
+          Carica BIN: {currentBin?.codice_identificativo}
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -947,8 +909,8 @@ const GestioneBins = () => {
                   onChange={handleCaricoInputChange}
                 >
                   {prodotti.map((prodotto) => (
-                    <MenuItem key={prodotto.id} value={prodotto.id}>
-                      {prodotto.nome}
+                    <MenuItem key={prodotto._id} value={prodotto._id}>
+                      {prodotto.nome} {prodotto.varieta}
                     </MenuItem>
                   ))}
                 </Select>
@@ -995,14 +957,8 @@ const GestioneBins = () => {
                 >
                   {currentCarico.origine_tipo === "appezzamento" ? (
                     appezzamenti.map((appezzamento) => (
-                      <MenuItem key={appezzamento.id} value={appezzamento.id}>
+                      <MenuItem key={appezzamento._id} value={appezzamento._id}>
                         {appezzamento.nome}
-                      </MenuItem>
-                    ))
-                  ) : currentCarico.origine_tipo === "fornitore" ? (
-                    fornitori.map((fornitore) => (
-                      <MenuItem key={fornitore.id} value={fornitore.id}>
-                        {fornitore.nome}
                       </MenuItem>
                     ))
                   ) : (
@@ -1039,15 +995,11 @@ const GestioneBins = () => {
                 InputProps={{
                   inputProps: {
                     min: 0,
-                    max:
-                      bins.find((b) => b.id === currentCarico.id_bin)
-                        ?.capacita_kg -
-                      bins.find((b) => b.id === currentCarico.id_bin)?.tara_kg,
+                    max: currentBin?.capacita_kg - currentBin?.tara_kg,
                   },
                 }}
                 helperText={`Max: ${
-                  bins.find((b) => b.id === currentCarico.id_bin)?.capacita_kg -
-                  bins.find((b) => b.id === currentCarico.id_bin)?.tara_kg
+                  currentBin?.capacita_kg - currentBin?.tara_kg
                 } kg (capacità - tara)`}
               />
             </Grid>
